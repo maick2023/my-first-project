@@ -1,0 +1,19 @@
+{
+  "name": "go-game",
+  "version": "1.0.0",
+  "description": "A simple Go game",
+  "main": "script.js",
+  "scripts": {
+    "test": "jest"
+  },
+  "keywords": [
+    "go",
+    "game",
+    "javascript"
+  ],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "jest": "^29.7.0"
+  }
+}

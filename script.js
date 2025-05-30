@@ -1,95 +1,150 @@
-document.addEventListener('DOMContentLoaded', () => {
-    const goBoardContainer = document.getElementById('go-board-container');
-    const BOARD_SIZE = 19;
-    const CELL_SIZE = 30; // pixels
+// Game constants and state
+const BOARD_SIZE = 19;
+const CELL_SIZE = 30; // pixels - used by DOM functions
 
-    let currentPlayer = 'black';
-    let boardState = Array(BOARD_SIZE).fill(null).map(() => Array(BOARD_SIZE).fill(null));
+// These are the global state variables for the browser environment.
+// They will be updated by handleIntersectionClick.
+let currentPlayer = 'black';
+let boardState = Array(BOARD_SIZE).fill(null).map(() => Array(BOARD_SIZE).fill(null));
 
-    function drawStone(row, col, playerColor) {
-        const clickedIntersection = goBoardContainer.querySelector(`.board-intersection[data-row='${row}'][data-col='${col}']`);
-        if (!clickedIntersection) return; // Should not happen
+// DOM specific elements - these will be null in Node.js environment
+let goBoardContainer = null;
 
-        // Clear any existing stone in this cell first (optional, but good for re-clicking same spot)
-        // while (clickedIntersection.firstChild) {
-        //    clickedIntersection.removeChild(clickedIntersection.firstChild);
-        // }
-
-        const stoneElement = document.createElement('div');
-        stoneElement.classList.add('stone', playerColor);
-        // CSS handles positioning within the intersection cell
-        clickedIntersection.appendChild(stoneElement);
+// Pure logic function for placing a stone
+function placeStoneLogic(row, col, currentBoard, player) {
+    if (row < 0 || row >= BOARD_SIZE || col < 0 || col >= BOARD_SIZE || currentBoard[row][col] !== null) {
+        return {
+            newBoardState: currentBoard,
+            newCurrentPlayer: player,
+            moveMade: false,
+            error: "Invalid move: Spot is out of bounds or already occupied."
+        };
     }
 
-    function handleIntersectionClick(event) {
-        const targetCell = event.currentTarget; // Use currentTarget to ensure it's the element with the listener
-        const row = parseInt(targetCell.dataset.row);
-        const col = parseInt(targetCell.dataset.col);
+    // Create a new board state to avoid mutating the input directly
+    const newBoard = currentBoard.map(arrRow => arrRow.slice());
+    newBoard[row][col] = player;
+    const nextPlayer = (player === 'black') ? 'white' : 'black';
 
-        // For now, we don't check if the spot is already taken for simplicity in this step
-        // A more robust check would be: if (boardState[row][col] !== null) return;
-        if (boardState[row][col] !== null) {
-            console.log(`Intersection (${row}, ${col}) is already occupied by ${boardState[row][col]}.`);
-            return; // Prevent placing stone if already occupied
-        }
+    return {
+        newBoardState: newBoard,
+        newCurrentPlayer: nextPlayer,
+        moveMade: true,
+    };
+}
 
+// Functions that interact with the DOM
+function drawStone(row, col, playerColor) {
+    if (!goBoardContainer) return; // Don't run in Node.js
 
-        boardState[row][col] = currentPlayer;
-        drawStone(row, col, currentPlayer);
+    const clickedIntersection = goBoardContainer.querySelector(`.board-intersection[data-row='${row}'][data-col='${col}']`);
+    if (!clickedIntersection) return;
 
-        currentPlayer = (currentPlayer === 'black') ? 'white' : 'black';
+    // Clear any existing stone if any (e.g. if styling implies one stone div per intersection)
+    // For current approach, just append. If only one stone div is desired:
+    // while (clickedIntersection.firstChild) {
+    //   clickedIntersection.removeChild(clickedIntersection.firstChild);
+    // }
+    const stoneElement = document.createElement('div');
+    stoneElement.classList.add('stone', playerColor);
+    clickedIntersection.appendChild(stoneElement);
+}
+
+function handleIntersectionClick(event) {
+    if (!goBoardContainer) return; // Don't run in Node.js
+
+    const targetCell = event.currentTarget;
+    const row = parseInt(targetCell.dataset.row);
+    const col = parseInt(targetCell.dataset.col);
+
+    // Use the pure logic function to determine the outcome of the move
+    const result = placeStoneLogic(row, col, boardState, currentPlayer);
+
+    if (result.moveMade) {
+        // Update the global game state
+        boardState = result.newBoardState;
+        currentPlayer = result.newCurrentPlayer;
+
+        // Perform DOM update
+        drawStone(row, col, boardState[row][col]); // boardState[row][col] is the player who just moved
         
         console.log(`Stone placed at (${row}, ${col}) by ${boardState[row][col]}. Next player: ${currentPlayer}`);
+    } else {
+        console.log(result.error || `Failed to place stone at (${row}, ${col}). Spot might be occupied or invalid.`);
     }
+}
 
-    function addStarPoints() {
-        const starPointsCoords = [
-            { row: 3, col: 3 }, { row: 3, col: 9 }, { row: 3, col: 15 },
-            { row: 9, col: 3 }, { row: 9, col: 9 }, { row: 9, col: 15 },
-            { row: 15, col: 3 }, { row: 15, col: 9 }, { row: 15, col: 15 }
-        ];
+function addStarPoints() {
+    if (!goBoardContainer) return; // Don't run in Node.js
 
-        starPointsCoords.forEach(coord => {
-            const starPoint = document.createElement('div');
-            starPoint.classList.add('star-point');
-            starPoint.style.position = 'absolute'; // Ensure star points are positioned relative to container
-            starPoint.style.top = `${(coord.row * CELL_SIZE) + (CELL_SIZE / 2)}px`;
-            starPoint.style.left = `${(coord.col * CELL_SIZE) + (CELL_SIZE / 2)}px`;
-            goBoardContainer.appendChild(starPoint);
-        });
-    }
+    const starPointsCoords = [
+        { row: 3, col: 3 }, { row: 3, col: 9 }, { row: 3, col: 15 },
+        { row: 9, col: 3 }, { row: 9, col: 9 }, { row: 9, col: 15 },
+        { row: 15, col: 3 }, { row: 15, col: 9 }, { row: 15, col: 15 }
+    ];
 
-    function drawBoard() {
-        goBoardContainer.innerHTML = ''; // Clear previous board (e.g., if resizing or restarting)
-        
-        // Set grid properties for the container
-        goBoardContainer.style.gridTemplateColumns = `repeat(${BOARD_SIZE}, ${CELL_SIZE}px)`;
-        goBoardContainer.style.gridTemplateRows = `repeat(${BOARD_SIZE}, ${CELL_SIZE}px)`;
-        goBoardContainer.style.width = `${BOARD_SIZE * CELL_SIZE}px`;
-        goBoardContainer.style.height = `${BOARD_SIZE * CELL_SIZE}px`;
+    starPointsCoords.forEach(coord => {
+        const starPoint = document.createElement('div');
+        starPoint.classList.add('star-point');
+        starPoint.style.position = 'absolute';
+        starPoint.style.top = `${(coord.row * CELL_SIZE) + (CELL_SIZE / 2)}px`;
+        starPoint.style.left = `${(coord.col * CELL_SIZE) + (CELL_SIZE / 2)}px`;
+        goBoardContainer.appendChild(starPoint);
+    });
+}
 
-        for (let row = 0; row < BOARD_SIZE; row++) {
-            for (let col = 0; col < BOARD_SIZE; col++) {
-                const cell = document.createElement('div');
-                cell.classList.add('board-intersection');
-                // CSS grid will handle cell sizing based on container's grid definition.
-                // Explicitly setting cell size can be redundant if using '1fr' or if CSS handles it.
-                // cell.style.width = `${CELL_SIZE}px`; (already 30px in CSS)
-                // cell.style.height = `${CELL_SIZE}px`; (already 30px in CSS)
-                cell.dataset.row = row;
-                cell.dataset.col = col;
-                cell.addEventListener('click', handleIntersectionClick);
-                goBoardContainer.appendChild(cell);
-            }
-        }
+function drawBoard() {
+    if (!goBoardContainer) return; // Don't run in Node.js
 
-        if (BOARD_SIZE === 19) {
-            addStarPoints();
+    goBoardContainer.innerHTML = ''; 
+    
+    goBoardContainer.style.gridTemplateColumns = `repeat(${BOARD_SIZE}, ${CELL_SIZE}px)`;
+    goBoardContainer.style.gridTemplateRows = `repeat(${BOARD_SIZE}, ${CELL_SIZE}px)`;
+    goBoardContainer.style.width = `${BOARD_SIZE * CELL_SIZE}px`;
+    goBoardContainer.style.height = `${BOARD_SIZE * CELL_SIZE}px`;
+
+    for (let row = 0; row < BOARD_SIZE; row++) {
+        for (let col = 0; col < BOARD_SIZE; col++) {
+            const cell = document.createElement('div');
+            cell.classList.add('board-intersection');
+            cell.dataset.row = row;
+            cell.dataset.col = col;
+            cell.addEventListener('click', handleIntersectionClick);
+            goBoardContainer.appendChild(cell);
         }
     }
 
-    // Initial setup
-    drawBoard();
-    console.log('Go board initialized. Current player:', currentPlayer);
-    // console.log('Board state:', boardState); // boardState is logged on each click now
-});
+    if (BOARD_SIZE === 19) {
+        addStarPoints();
+    }
+}
+
+// Browser-specific execution
+if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+    document.addEventListener('DOMContentLoaded', () => {
+        goBoardContainer = document.getElementById('go-board-container');
+        if (goBoardContainer) {
+                // Reset state for fresh board draw in browser context for the live game
+                currentPlayer = 'black'; // Initial player for the live game
+                boardState = Array(BOARD_SIZE).fill(null).map(() => Array(BOARD_SIZE).fill(null)); // Initial board for the live game
+            drawBoard();
+            console.log('Go board initialized for browser. Current player:', currentPlayer);
+        } else {
+            console.error('Go board container not found in DOM.');
+        }
+    });
+}
+
+// Exports for testing in Node.js
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = {
+        BOARD_SIZE,
+        getInitialBoardState: () => Array(BOARD_SIZE).fill(null).map(() => Array(BOARD_SIZE).fill(null)),
+        getInitialCurrentPlayer: () => 'black',
+            placeStoneLogic, // Export the new pure function
+            // Note: global boardState and currentPlayer are not directly exported for testing initial state logic,
+            // as their "initial" values are what the getters provide.
+            // The DOM functions like drawStone, handleIntersectionClick, addStarPoints, drawBoard
+            // are not exported as they are not meant for direct Node.js testing without DOM mocks.
+    };
+}
