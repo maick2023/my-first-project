@@ -1,6 +1,7 @@
 // Game constants and state
 const BOARD_SIZE = 19;
-const CELL_SIZE = 30; // pixels - used by DOM functions
+// const CELL_SIZE = 30; // No longer used for fixed board/cell pixel dimensions. Retain if needed for other calculations.
+                       // For star point positioning, we'll use percentages or derive from container.
 
 // Game settings
 let currentGameMode = 'pvai'; 
@@ -11,6 +12,7 @@ const aiPlayerColor = 'white';
 // Global state variables
 let currentPlayer; 
 let boardState; 
+let gameEnded = false;
 
 // DOM elements
 let goBoardContainer = null;
@@ -18,6 +20,8 @@ let gameModeSelect = null;
 let aiDifficultySelect = null;
 let aiDifficultySection = null;
 let newGameButton = null;
+let endGameButton = null; 
+let gameMessageElement = null; 
 
 // Helper function: Get valid neighbors
 function getNeighbors(row, col, boardSize) {
@@ -164,6 +168,12 @@ function drawStone(row, col, playerColor) {
 }
 
 function handleIntersectionClick(event) {
+    if (gameEnded) {
+        console.log("Move attempted, but game has ended.");
+        if (gameMessageElement) gameMessageElement.textContent = "Game has ended. Press 'Start New Game' to play again.";
+        // alert("The game has ended. Please start a new game."); // Alternative
+        return; 
+    }
     if (!goBoardContainer) return; 
 
     const targetCell = event.currentTarget;
@@ -195,11 +205,24 @@ function handleIntersectionClick(event) {
         console.log(`Stone placed at (${row}, ${col}) by ${playerMakingMove}.`);
         
         currentPlayer = result.newCurrentPlayer;
-        console.log(`Next player: ${currentPlayer}`);
         // updateTurnDisplay(); 
+        
+        console.log(`[DEBUG] Human move by ${playerMakingMove} processed. Global currentPlayer is now: ${currentPlayer}. Game mode: ${currentGameMode}. AI color: ${aiPlayerColor}. Human color: ${humanPlayerColor}`);
 
-        if (currentGameMode === 'pvai' && currentPlayer === aiPlayerColor) {
+        // Refined condition:
+        if (currentGameMode === 'pvai' && 
+            playerMakingMove === humanPlayerColor && // Ensure the move just made was by the human
+            currentPlayer === aiPlayerColor) {       // And now it's the AI's turn
+        
+            console.log("[DEBUG] AI Trigger: Conditions met. Human made a move, and it's now AI's turn. Calling triggerAIMove via setTimeout.");
             setTimeout(triggerAIMove, 500); 
+        
+        } else if (currentGameMode === 'pvai' && playerMakingMove === humanPlayerColor && currentPlayer !== aiPlayerColor) {
+            // This case means human moved, but it's somehow not AI's turn. This would be unexpected.
+            console.warn(`[DEBUG] AI Trigger: Post-human move, but not AI's turn. Current player: ${currentPlayer}. AI Player: ${aiPlayerColor}`);
+        } else if (currentGameMode === 'pvai' && playerMakingMove === aiPlayerColor) {
+            // This would mean AI is somehow the one making a move through handleIntersectionClick - should not happen.
+            console.warn(`[DEBUG] AI Trigger: AI was playerMakingMove in handleIntersectionClick. This is unexpected.`);
         }
     } else {
         console.log(result.error || `Failed to place stone at (${row}, ${col}) by ${playerMakingMove}.`);
@@ -210,8 +233,8 @@ function triggerAIMove() {
     if (currentGameMode !== 'pvai' || currentPlayer !== aiPlayerColor) {
         return; 
     }
+    console.log(`[DEBUG] triggerAIMove called. AI Player: ${aiPlayerColor}, Current Difficulty: ${currentAiDifficulty}`);
 
-    console.log(`AI's turn (${aiPlayerColor}), Difficulty: ${currentAiDifficulty}`);
     let aiMoveCoords;
     if (currentAiDifficulty === 'low') {
         aiMoveCoords = aiMakeRandomMove(boardState, aiPlayerColor);
@@ -222,28 +245,29 @@ function triggerAIMove() {
         console.warn(`Unknown AI difficulty: ${currentAiDifficulty}. Defaulting to random.`);
         aiMoveCoords = aiMakeRandomMove(boardState, aiPlayerColor);
     }
+    console.log(`[DEBUG] AI function (${currentAiDifficulty}) proposed move:`, aiMoveCoords);
 
     if (aiMoveCoords) { 
         const [aiRow, aiCol] = aiMoveCoords;
         const aiResult = placeStoneLogic(aiRow, aiCol, boardState, aiPlayerColor);
+        console.log(`[DEBUG] placeStoneLogic result for AI's move:`, aiResult);
 
         if (aiResult.moveMade) {
-            const prevPlayerForAIMove = aiPlayerColor; // AI is making the move
+            const prevPlayerForAIMove = aiPlayerColor; 
             boardState = aiResult.newBoardState;
             
-            drawStone(aiRow, aiCol, prevPlayerForAIMove); // Draw AI's stone (it's aiPlayerColor)
+            drawStone(aiRow, aiCol, prevPlayerForAIMove); 
             
             if (aiResult.capturedCoords && aiResult.capturedCoords.length > 0) {
                 console.log("AI captured stones at:", aiResult.capturedCoords);
                 aiResult.capturedCoords.forEach(coord => removeStoneFromDOM(coord[0], coord[1]));
             }
             console.log("AI placed stone at:", aiRow, aiCol);
-
-            currentPlayer = aiResult.newCurrentPlayer; // Should switch back to human
-            console.log(`Next player: ${currentPlayer}`);
+            currentPlayer = aiResult.newCurrentPlayer; 
+            console.log(`[DEBUG] AI move successful. Updating boardState and DOM. New current player: ${currentPlayer}`);
             // updateTurnDisplay(); 
 
-            if (gameMode === 'pvai' && currentPlayer !== humanPlayerColor) {
+            if (currentGameMode === 'pvai' && currentPlayer !== humanPlayerColor) {
                 console.error("Error: Turn did not switch back to human after AI move. Current player:", currentPlayer);
             }
         } else {
@@ -256,8 +280,8 @@ function triggerAIMove() {
         }
     } else {
         console.log("AI passes.");
-        currentPlayer = humanPlayerColor; // Switch turn back to human
-        console.log(`Next player: ${currentPlayer}`);
+        currentPlayer = humanPlayerColor; 
+        console.log(`[DEBUG] AI passes. New current player: ${currentPlayer}`);
         // updateTurnDisplay();
     }
     // Potentially check for game end conditions here (e.g., two consecutive passes)
@@ -281,33 +305,53 @@ function removeStoneFromDOM(row, col) {
 }
 
 function addStarPoints() {
-    if (!goBoardContainer) return; // Don't run in Node.js
+    if (BOARD_SIZE !== 19 || !goBoardContainer) return; 
 
-    const starPointsCoords = [
+    // Clear existing star points first
+    const existingStarPoints = goBoardContainer.querySelectorAll('.star-point');
+    existingStarPoints.forEach(sp => sp.remove());
+
+    const starPointCoordinates = [ // 0-indexed
         { row: 3, col: 3 }, { row: 3, col: 9 }, { row: 3, col: 15 },
         { row: 9, col: 3 }, { row: 9, col: 9 }, { row: 9, col: 15 },
         { row: 15, col: 3 }, { row: 15, col: 9 }, { row: 15, col: 15 }
     ];
 
-    starPointsCoords.forEach(coord => {
-        const starPoint = document.createElement('div');
-        starPoint.classList.add('star-point');
-        starPoint.style.position = 'absolute';
-        starPoint.style.top = `${(coord.row * CELL_SIZE) + (CELL_SIZE / 2)}px`;
-        starPoint.style.left = `${(coord.col * CELL_SIZE) + (CELL_SIZE / 2)}px`;
-        goBoardContainer.appendChild(starPoint);
+    starPointCoordinates.forEach(coord => {
+        const star = document.createElement('div');
+        star.classList.add('star-point');
+        star.style.position = 'absolute'; // CSS should already have this, but good to be sure
+
+        // Calculate position as percentage of container dimensions
+        const leftPercent = ((coord.col + 0.5) / BOARD_SIZE) * 100;
+        const topPercent = ((coord.row + 0.5) / BOARD_SIZE) * 100;
+
+        star.style.left = `${leftPercent}%`;
+        star.style.top = `${topPercent}%`;
+        // CSS transform will center the star-point div on this coordinate
+
+        goBoardContainer.appendChild(star);
     });
 }
 
 function drawBoard() {
-    if (!goBoardContainer) return; // Don't run in Node.js
+    if (!goBoardContainer) return; 
 
-    goBoardContainer.innerHTML = ''; 
+    // Clear only intersection divs if they exist, or all children if simple
+    // goBoardContainer.innerHTML = ''; // This removes everything, including star points if they are direct children
+                                     // and not re-added *after* intersections.
+                                     // For this version, clearBoardDOM() handles stone removal.
+                                     // drawBoard() will create intersections. Star points are added in initializeGame.
     
-    goBoardContainer.style.gridTemplateColumns = `repeat(${BOARD_SIZE}, ${CELL_SIZE}px)`;
-    goBoardContainer.style.gridTemplateRows = `repeat(${BOARD_SIZE}, ${CELL_SIZE}px)`;
-    goBoardContainer.style.width = `${BOARD_SIZE * CELL_SIZE}px`;
-    goBoardContainer.style.height = `${BOARD_SIZE * CELL_SIZE}px`;
+    // Remove only old intersections to preserve other potential children if any
+    const oldIntersections = goBoardContainer.querySelectorAll('.board-intersection');
+    oldIntersections.forEach(intersection => intersection.remove());
+
+
+    goBoardContainer.style.gridTemplateColumns = `repeat(${BOARD_SIZE}, 1fr)`;
+    goBoardContainer.style.gridTemplateRows = `repeat(${BOARD_SIZE}, 1fr)`;
+    // Width and height are now controlled by CSS (vw/%, max-width, aspect-ratio)
+    // No longer set goBoardContainer.style.width and .height here
 
     for (let row = 0; row < BOARD_SIZE; row++) {
         for (let col = 0; col < BOARD_SIZE; col++) {
@@ -317,12 +361,10 @@ function drawBoard() {
             cell.dataset.col = col;
             cell.addEventListener('click', handleIntersectionClick);
             goBoardContainer.appendChild(cell);
+            // No explicit cell.style.width/height needed, grid 1fr handles it
         }
     }
-
-    if (BOARD_SIZE === 19) {
-        addStarPoints();
-    }
+    // Star points are called from initializeGame after drawBoard typically
 }
 
 // Browser-specific execution
@@ -333,24 +375,35 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
         aiDifficultySelect = document.getElementById('aiDifficultySelect');
         aiDifficultySection = document.getElementById('aiDifficultySection');
         newGameButton = document.getElementById('newGameButton');
+        endGameButton = document.getElementById('endGameButton'); // Added
+        gameMessageElement = document.getElementById('gameMessage'); // Added
 
-        if (!goBoardContainer || !gameModeSelect || !aiDifficultySelect || !aiDifficultySection || !newGameButton) {
+
+        if (!goBoardContainer || !gameModeSelect || !aiDifficultySelect || !aiDifficultySection || !newGameButton || !endGameButton || !gameMessageElement) {
             console.error("One or more crucial UI elements for game setup not found!");
-            return;
+            // return; // Keep return if critical, or allow partial functionality
         }
         
-        gameModeSelect.addEventListener('change', () => {
-            currentGameMode = gameModeSelect.value;
-            updateGameSetupUI();
-            // Optionally, could auto-start a new game or just update setting for next new game.
-            // For now, changing mode only affects UI until "New Game" is pressed.
-        });
+        if (gameModeSelect) {
+            gameModeSelect.addEventListener('change', () => {
+                currentGameMode = gameModeSelect.value;
+                updateGameSetupUI();
+            });
+        }
         
-        aiDifficultySelect.addEventListener('change', () => {
-            currentAiDifficulty = aiDifficultySelect.value;
-        });
+        if (aiDifficultySelect) {
+            aiDifficultySelect.addEventListener('change', () => {
+                currentAiDifficulty = aiDifficultySelect.value;
+            });
+        }
         
-        newGameButton.addEventListener('click', initializeGame);
+        if (newGameButton) {
+            newGameButton.addEventListener('click', initializeGame);
+        }
+
+        if (endGameButton) {
+            endGameButton.addEventListener('click', handleEndGameButtonClick);
+        }
 
         initializeGame(); // Setup initial game state and board based on defaults
         
@@ -378,11 +431,16 @@ function initializeGame() {
     // Read current selections from UI, or use defaults if UI not fully ready
     currentGameMode = gameModeSelect ? gameModeSelect.value : 'pvai';
     currentAiDifficulty = aiDifficultySelect ? aiDifficultySelect.value : 'medium';
+    
+    gameEnded = false; // Reset game ended state
+    if (gameMessageElement) gameMessageElement.textContent = ''; // Clear message
+    console.log("Game initialized/reset. gameEnded set to false.");
+
 
     console.log(`Initializing new game: Mode: ${currentGameMode}, Difficulty: ${currentAiDifficulty}`);
 
-    boardState = getInitialBoardState(); // Defined below for Node.js and browser scope
-    currentPlayer = getInitialCurrentPlayer(); // Defined below, returns humanPlayerColor
+    boardState = getInitialBoardState(); 
+    currentPlayer = getInitialCurrentPlayer(); 
 
     if (goBoardContainer) { 
         clearBoardDOM();
@@ -413,14 +471,46 @@ function getInitialCurrentPlayer() {
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         BOARD_SIZE,
-            getInitialBoardState, // Export if it's defined locally here
-            getInitialCurrentPlayer, // Export if it's defined locally here
+            getInitialBoardState, 
+            getInitialCurrentPlayer, 
             placeStoneLogic,
             getNeighbors, 
             findGroup,    
             aiMakeRandomMove,
-            aiMakeHeuristicMove, // Export the new heuristic AI function
+            aiMakeHeuristicMove,
+            initializeGame, 
+            endGame,        
+            getGameEndedState 
     };
+}
+
+// Getter for gameEnded state for testing
+function getGameEndedState() {
+    return gameEnded;
+}
+
+// Encapsulated core "end game" logic
+function endGame() {
+    if (gameEnded) {
+        console.log("endGame called, but game already ended.");
+        return false; // Indicate no change in state
+    }
+    gameEnded = true;
+    console.log("Game ended by endGame function. gameEnded set to true.");
+    // DOM updates should be handled by the caller/event listener if needed
+    return true; // Indicate state changed
+}
+
+// Event handler for the End Game button
+function handleEndGameButtonClick() {
+    if (endGame()) { // Call core logic
+        if (gameMessageElement) {
+            gameMessageElement.textContent = "Game Ended. Press 'Start New Game' to play again.";
+        } else {
+            // Fallback if messageElement isn't available (e.g. during tests or if DOM is weird)
+            alert("Game Ended. Press 'Start New Game' to play again.");
+        }
+    }
 }
 
 // Basic AI function

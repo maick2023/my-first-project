@@ -9,20 +9,17 @@ body {
 
 #go-board-container {
     display: grid;
-    /* We'll set the grid size dynamically with JavaScript,
-       but let's add a default for now or some placeholder */
-    grid-template-columns: repeat(19, 30px);
-    grid-template-rows: repeat(19, 30px);
+    /* grid-template-columns and rows will be set by JS to 1fr units */
     border: 2px solid #666;
-    width: calc(19 * 30px); /* 570px */
-    height: calc(19 * 30px); /* 570px */
     background-color: #dcb35c; /* Traditional Go board color */
     position: relative; /* For positioning star points and stones */
+    width: 90vw; /* Responsive width */
+    max-width: 600px; /* Max size */
+    aspect-ratio: 1 / 1; /* Keep it square */
 }
 
 .board-intersection {
-    width: 30px;
-    height: 30px;
+    /* width and height will be determined by the grid (1fr) */
     position: relative;
     box-sizing: border-box; /* Important for borders */
 }
@@ -59,8 +56,8 @@ body {
    for now, this provides a basic grid */
 
 .stone {
-    width: 26px; /* Slightly smaller than cell size */
-    height: 26px;
+    width: 85%; /* Relative to parent .board-intersection */
+    height: 85%;
     border-radius: 50%;
     position: absolute;
     top: 50%;
@@ -81,8 +78,8 @@ body {
 /* Star points (Hoshi) - basic styling, can be enhanced */
 .star-point {
     position: absolute;
-    width: 6px;
-    height: 6px;
+    width: 5px; /* Smaller fixed size, or could be % of cell if parented differently */
+    height: 5px;
     background-color: black;
     border-radius: 50%;
     transform: translate(-50%, -50%);
@@ -123,4 +120,21 @@ body {
 }
 #newGameButton:hover {
     background-color: #45a049;
+}
+
+#endGameButton {
+    background-color: #f44336; /* Red */
+    color: white;
+    cursor: pointer;
+    margin-left: 10px; /* Space it from New Game button */
+}
+#endGameButton:hover {
+    background-color: #da190b;
+}
+#gameMessage { /* Style for the new message element */
+    margin-top: 10px;
+    font-weight: bold;
+    min-height: 1.2em; /* Keep space even if empty */
+    color: #333;
+    text-align: center;
 }

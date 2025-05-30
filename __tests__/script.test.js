@@ -5,9 +5,12 @@ const {
     getInitialBoardState,
     getInitialCurrentPlayer,
     BOARD_SIZE,
-    getNeighbors, // Newly imported
-    findGroup,    // Newly imported
-    aiMakeRandomMove
+    getNeighbors, 
+    findGroup,    
+    aiMakeRandomMove,
+    initializeGame, // Added for End Game tests
+    endGame,        // Added for End Game tests
+    getGameEndedState // Added for End Game tests
 } = game;
 
 describe('Board Initialization', () => {
@@ -44,6 +47,51 @@ describe('Board Initialization', () => {
             const initialPlayer = game.getInitialCurrentPlayer();
             expect(initialPlayer).toBe('black');
         });
+    });
+});
+
+describe('End Game Logic', () => {
+    // initializeGame is imported and should reset gameEnded
+    // endGame is imported to trigger the game end
+    // getGameEndedState is imported to check the status
+
+    beforeEach(() => {
+        // Ensure a fresh state for each test, especially for gameEnded
+        initializeGame(); // This should set gameEnded to false
+    });
+
+    test('initializeGame should set gameEnded to false', () => {
+        // initializeGame is called in beforeEach, so gameEnded should be false
+        expect(getGameEndedState()).toBe(false);
+        // Call it again just to be explicit for this test's purpose
+        initializeGame();
+        expect(getGameEndedState()).toBe(false);
+    });
+
+    test('endGame should set gameEnded to true', () => {
+        expect(getGameEndedState()).toBe(false); // Pre-condition
+        const stateChanged = endGame();
+        expect(stateChanged).toBe(true); // endGame should indicate it changed the state
+        expect(getGameEndedState()).toBe(true);
+    });
+
+    test('endGame should be idempotent (calling it again does not change state, returns false)', () => {
+        endGame(); // gameEnded is now true
+        expect(getGameEndedState()).toBe(true);
+        
+        const stateChangedAgain = endGame(); // Call again
+        expect(stateChangedAgain).toBe(false); // endGame should indicate state did not change
+        expect(getGameEndedState()).toBe(true); // Should remain true
+    });
+
+    test('moves should be prevented if gameEnded is true (conceptual check on state)', () => {
+        // This test relies on the fact that handleIntersectionClick checks gameEnded.
+        // We are testing the *state* that handleIntersectionClick uses.
+        endGame(); // End the game
+        expect(getGameEndedState()).toBe(true);
+        // At this point, if handleIntersectionClick were called, it should see gameEnded as true
+        // and prevent a move. We don't directly test handleIntersectionClick here due to DOM dependency,
+        // but confirm the state it relies on is correctly set.
     });
 });
 
