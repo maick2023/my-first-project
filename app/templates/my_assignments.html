@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block content %}
+    <h2>My Assignments</h2>
+    {% if assignments %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Filename</th>
+                    <th>Uploaded At (UTC)</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for assignment in assignments %}
+                <tr>
+                    <td>{{ assignment.filename }}</td>
+                    <td>{{ assignment.uploaded_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                    <td><span class="status-{{ assignment.status | lower }}">{{ assignment.status | capitalize }}</span></td>
+                    <td><a href="{{ url_for('main.assignment_detail', assignment_id=assignment.id) }}">View Details</a></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p>You haven't uploaded any assignments yet. <a href="{{ url_for('main.upload') }}">Upload one now!</a></p>
+    {% endif %}
+    {% if assignments %} {# Show this link only if there are assignments, otherwise covered by the message above #}
+    <p style="margin-top: 20px;"><a href="{{ url_for('main.upload') }}">Upload another assignment</a></p>
+    {% endif %}
+{% endblock %}

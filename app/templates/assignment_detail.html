@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block content %}
+    <h2>Assignment: {{ assignment.filename }}</h2>
+    <p><strong>Uploaded:</strong> {{ assignment.uploaded_at.strftime('%Y-%m-%d %H:%M:%S') }} UTC</p>
+    <p><strong>Status:</strong> <span class="status-{{ assignment.status | lower }}">{{ assignment.status | capitalize }}</span></p>
+    <hr>
+
+    {% if qa_items %}
+        <h3>Processed Items:</h3>
+        {% for item in qa_items %}
+            <div class="qa-item {% if not item.is_correct %}incorrect{% endif %}">
+                <h4>Item ID: {{ item.id }}</h4>
+
+                <p><strong>Question/Content:</strong></p>
+                <pre>{{ item.question_text }}</pre>
+
+                {% if item.answer_text and item.answer_text != item.question_text and item.question_text != "Raw OCR Output" %}
+                    <p><strong>Answer/Details:</strong></p>
+                    <pre>{{ item.answer_text }}</pre>
+                {% elif item.question_text == "Raw OCR Output" and item.answer_text %}
+                     <p><strong>Full Text Details:</strong></p>
+                     <pre>{{ item.answer_text }}</pre>
+                {% elif item.answer_text and item.answer_text == item.question_text and item.question_text != "Raw OCR Output" %}
+                    {# Handles cases where answer might be identical but still relevant if it was parsed as such #}
+                    <p><strong>Answer/Details:</strong></p>
+                    <pre>{{ item.answer_text }}</pre>
+                {% else %}
+                    <p><em>(No distinct answer or further details provided for this item)</em></p>
+                {% endif %}
+
+                {% if not item.is_correct %}
+                    <div class="status-incorrect">
+                        <p><strong>Status: Incorrect</strong></p>
+                        <div class="explanation">
+                           <p><strong>Explanation:</strong> {{ item.explanation }}</p>
+                        </div>
+                    </div>
+                {% endif %}
+
+                <form method="POST" action="{{ url_for('main.mark_error', qa_item_id=item.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div>
+                        <label for="explanation-{{ item.id }}">Explanation (if marking incorrect):</label><br>
+                        <textarea id="explanation-{{ item.id }}" name="explanation" rows="3">{{ item.explanation if item.explanation else '' }}</textarea>
+                    </div>
+                    <button type="submit" name="mark_incorrect" value="true">Mark as Incorrect & Save Explanation</button>
+                </form>
+            </div>
+        {% endfor %}
+    {% else %}
+        <h3>Content Details:</h3>
+        {% if assignment.ocr_text_raw %}
+            <pre>{{ assignment.ocr_text_raw }}</pre>
+            <p><em>No structured items were parsed from this text, or the assignment currently has no processed items. Displaying raw OCR text.</em></p>
+        {% else %}
+            <p>No OCR text or processed items found for this assignment.</p>
+        {% endif %}
+    {% endif %}
+    <hr>
+    <p><a href="{{ url_for('main.my_assignments') }}">Back to My Assignments</a> | <a href="{{ url_for('main.upload') }}">Upload Another Assignment</a></p>
+{% endblock %}

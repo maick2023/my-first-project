@@ -1,0 +1,43 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    {% if title %}
+    <title>{{ title }} - OCR Grader</title>
+    {% else %}
+    <title>OCR Grader</title>
+    {% endif %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  </head>
+  <body>
+    <nav class="navbar">
+      <a href="{{ url_for('main.index') }}">Home</a>
+      {% if current_user.is_anonymous %}
+      <a href="{{ url_for('main.login') }}">Login</a>
+      <a href="{{ url_for('main.register') }}">Register</a>
+      {% else %}
+      <a href="{{ url_for('main.my_assignments') }}">My Assignments</a>
+      <a href="{{ url_for('main.upload') }}">Upload New</a>
+      <a href="{{ url_for('main.logout') }}">Logout</a>
+      {% else %}
+      <a href="{{ url_for('main.login') }}">Login</a>
+      <a href="{{ url_for('main.register') }}">Register</a>
+      {% endif %}
+    </nav>
+    <div class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <ul class="flashes">
+            {% for category, message in messages %}
+                <li class="{{ category }}">{{ message }}</li>
+            {% endfor %}
+            </ul>
+        {% endif %}
+        {% endwith %}
+        <div class="content-wrapper">
+             {% block content %}{% endblock %}
+        </div>
+    </div>
+  </body>
+</html>

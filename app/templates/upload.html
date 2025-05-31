@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block content %}
+    <h1>Upload Assignment</h1>
+    <form method="POST" enctype="multipart/form-data" action="{{ url_for('main.upload') }}">
+        <p>
+            <label for="image">Select image to upload:</label><br>
+            <input type="file" id="image" name="image" accept="image/png, image/jpeg, image/jpg" required>
+        </p>
+        <p><input type="submit" value="Upload Image"></p>
+    </form>
+    {% with messages = get_flashed_messages(category_filter=["upload_error"]) %}
+        {% if messages %}
+            <ul style="color: red;">
+                {% for message in messages %}
+                    <li>{{ message }}</li>
+                {% endfor %}
+            </ul>
+        {% endif %}
+    {% endwith %}
+{% endblock %}

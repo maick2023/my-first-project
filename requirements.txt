@@ -1,0 +1,10 @@
+Flask
+Flask-WTF
+Flask-SQLAlchemy
+Flask-Login
+Flask-Migrate
+Werkzeug
+email_validator
+pytesseract
+Pillow
+Flask-CSRFProtect
