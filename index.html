@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Go Game</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <h1>Go Game</h1>
+
+    <div id="game-setup">
+        <h2>Game Setup</h2>
+
+        <div>
+            <label for="gameModeSelect">Game Mode:</label>
+            <select id="gameModeSelect">
+                <option value="pvp">Player vs. Player</option>
+                <option value="pvai" selected>Player vs. AI</option>
+            </select>
+        </div>
+
+        <div id="aiDifficultySection">
+            <label for="aiDifficultySelect">AI Difficulty:</label>
+            <select id="aiDifficultySelect">
+                <option value="low">Low</option>
+                <option value="medium" selected>Medium</option>
+                <!-- <option value="high">High</option> --> <!-- For future -->
+            </select>
+        </div>
+
+        <button id="newGameButton">Start New Game</button>
+        <button id="endGameButton" style="background-color: #f44336;">End Game</button>
+    </div>
+    <div id="gameMessage" style="margin-top: 10px; font-weight: bold; min-height: 1.2em;"></div>
+
+    <div id="go-board-container">
+        <!-- The Go board will be generated here by JavaScript -->
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
