@@ -5,12 +5,14 @@ const {
     getInitialBoardState,
     getInitialCurrentPlayer,
     BOARD_SIZE,
-    getNeighbors, 
-    findGroup,    
+    getNeighbors,
+    findGroup,
     aiMakeRandomMove,
-    initializeGame, // Added for End Game tests
-    endGame,        // Added for End Game tests
-    getGameEndedState // Added for End Game tests
+    initializeGame,
+    endGame,
+    getGameEndedState,
+    calculateScores, // Added for Score Calculation tests
+    getTerritoryInfo // Added for Territory Counting tests
 } = game;
 
 describe('Board Initialization', () => {
@@ -50,6 +52,166 @@ describe('Board Initialization', () => {
     });
 });
 
+describe('Score Calculation (calculateScores)', () => {
+    test('should correctly calculate scores with no territory, captures, or komi (if komi is 0)', () => {
+        expect(calculateScores(0, 0, 0, 0, 0)).toEqual({ blackScore: 0, whiteScore: 0 });
+    });
+
+    test('should correctly calculate scores with territory and captures, default komi', () => {
+        // Black: 10 terr + 3 (white stones captured by black) = 13
+        // White: 5 terr + 2 (black stones captured by white) + 6.5 komi = 13.5
+        expect(calculateScores(10, 5, 2, 3, 6.5)).toEqual({ blackScore: 13, whiteScore: 13.5 });
+    });
+
+    test('should handle zero captures', () => {
+        expect(calculateScores(10, 5, 0, 0, 6.5)).toEqual({ blackScore: 10, whiteScore: 11.5 });
+    });
+
+    test('should handle zero territory', () => {
+        expect(calculateScores(0, 0, 2, 3, 6.5)).toEqual({ blackScore: 3, whiteScore: 8.5 });
+    });
+
+    test('should apply komi correctly to white', () => {
+        expect(calculateScores(0, 0, 0, 0, 7.5).whiteScore).toBe(7.5);
+        expect(calculateScores(10, 10, 0, 0, 0).blackScore).toBe(10);
+        expect(calculateScores(10, 10, 0, 0, 0).whiteScore).toBe(10);
+    });
+});
+
+describe('Territory Counting (getTerritoryInfo)', () => {
+    let board;
+
+    // Helper to set stones, assumes board is available in the scope
+    const setStonesOnBoard = (stonesToSet) => {
+        stonesToSet.forEach(({ r, c, color }) => {
+            if (r >= 0 && r < BOARD_SIZE && c >= 0 && c < BOARD_SIZE) {
+                board[r][c] = color;
+            }
+        });
+    };
+
+    beforeEach(() => {
+        board = getInitialBoardState(); // Creates a BOARD_SIZE x BOARD_SIZE null-filled board
+    });
+
+    test('should count all points as neutral on an empty board', () => {
+        const result = getTerritoryInfo(board);
+        expect(result.blackTerritory).toBe(0);
+        expect(result.whiteTerritory).toBe(0);
+        expect(result.neutralPoints).toBe(BOARD_SIZE * BOARD_SIZE);
+    });
+
+    test('should count no territory or neutral points on a full board', () => {
+        for (let r = 0; r < BOARD_SIZE; r++) {
+            for (let c = 0; c < BOARD_SIZE; c++) {
+                board[r][c] = 'black'; // Fill with one color
+            }
+        }
+        const result = getTerritoryInfo(board);
+        expect(result.blackTerritory).toBe(0);
+        expect(result.whiteTerritory).toBe(0);
+        expect(result.neutralPoints).toBe(0); // No empty points
+    });
+
+    test('should correctly count simple enclosed black territory (3x3 empty area)', () => {
+        // B B B B B  (0,0 to 0,4) and (4,0 to 4,4)
+        // B . . . B  (1,0), (1,4)
+        // B . . . B  (2,0), (2,4)
+        // B . . . B  (3,0), (3,4)
+        // B B B B B
+        // Creates a 3x3 empty area (9 points)
+        if (BOARD_SIZE < 5) return;
+        // Wall of black stones
+        for (let i = 0; i < 5; i++) {
+            board[0][i] = 'black'; board[4][i] = 'black';
+            board[i][0] = 'black'; board[i][4] = 'black';
+        }
+        // Fill rest of the board with white stones to isolate the black territory
+        for (let r = 0; r < BOARD_SIZE; r++) {
+            for (let c = 0; c < BOARD_SIZE; c++) {
+                if (board[r][c] === null &&
+                    !((r > 0 && r < 4) && (c > 0 && c < 4))) { // If not in the 3x3 empty area
+                    board[r][c] = 'white';
+                }
+            }
+        }
+        const result = getTerritoryInfo(board);
+        expect(result.blackTerritory).toBe(9);
+        expect(result.whiteTerritory).toBe(0);
+        expect(result.neutralPoints).toBe(0); // All other points are filled with white stones
+    });
+
+    test('should correctly count simple white territory (2x2 empty area)', () => {
+        // Creates a 2x2 empty area (4 points)
+        if (BOARD_SIZE < 4) return;
+        for (let i = 0; i < 4; i++) {
+            board[0][i] = 'white'; board[3][i] = 'white';
+            board[i][0] = 'white'; board[i][3] = 'white';
+        }
+        // Fill rest of the board with black stones
+        for (let r = 0; r < BOARD_SIZE; r++) {
+            for (let c = 0; c < BOARD_SIZE; c++) {
+                if (board[r][c] === null &&
+                    !((r > 0 && r < 3) && (c > 0 && c < 3))) { // If not in 2x2 empty area
+                    board[r][c] = 'black';
+                }
+            }
+        }
+        const result = getTerritoryInfo(board);
+        expect(result.whiteTerritory).toBe(4);
+        expect(result.blackTerritory).toBe(0);
+        expect(result.neutralPoints).toBe(0); // All other points are filled with black stones
+    });
+
+    test('should correctly identify dame points (3 neutral points, isolated)', () => {
+        if (BOARD_SIZE < 3) return;
+        // B . W
+        // B . W
+        // B . W
+        // Fill entire board with alternating colors to make this specific dame clear
+        for (let r = 0; r < BOARD_SIZE; r++) {
+            for (let c = 0; c < BOARD_SIZE; c++) {
+                if (c === 0) board[r][c] = 'black';
+                else if (c === 2) board[r][c] = 'white';
+                else if (c === 1 && r < 3) board[r][c] = null; // The dame column for first 3 rows
+                else board[r][c] = (c % 2 === 0) ? 'black' : 'white'; // Fill rest predictably
+            }
+        }
+        // Explicitly set the dame structure
+        board[0][0] = 'black'; board[1][0] = 'black'; board[2][0] = 'black';
+        board[0][1] = null;    board[1][1] = null;    board[2][1] = null; // Dame
+        board[0][2] = 'white'; board[1][2] = 'white'; board[2][2] = 'white';
+
+        const result = getTerritoryInfo(board);
+        // In this specific setup, the 3 null points are dame.
+        // All other points are stones. So, no other territory.
+        expect(result.neutralPoints).toBe(3);
+        expect(result.blackTerritory).toBe(0);
+        expect(result.whiteTerritory).toBe(0);
+    });
+
+    test('territory on edge/corner (black 1x1 territory in corner 0,0)', () => {
+        if (BOARD_SIZE < 2) return;
+        // B B
+        // B . (0,0 is surrounded by B and edge)
+        board[0][1] = 'black';
+        board[1][0] = 'black';
+        board[1][1] = 'black'; // Make it more solid
+        // Fill rest of board with white
+        for (let r = 0; r < BOARD_SIZE; r++) {
+            for (let c = 0; c < BOARD_SIZE; c++) {
+                if (board[r][c] === null && (r !== 0 || c !== 0) ) {
+                    board[r][c] = 'white';
+                }
+            }
+        }
+        const result = getTerritoryInfo(board);
+        expect(result.blackTerritory).toBe(1);
+        expect(result.whiteTerritory).toBe(0); // All other cells are white STONES, not empty white territory
+        expect(result.neutralPoints).toBe(0);
+    });
+});
+
 describe('End Game Logic', () => {
     // initializeGame is imported and should reset gameEnded
     // endGame is imported to trigger the game end
@@ -78,7 +240,7 @@ describe('End Game Logic', () => {
     test('endGame should be idempotent (calling it again does not change state, returns false)', () => {
         endGame(); // gameEnded is now true
         expect(getGameEndedState()).toBe(true);
-        
+
         const stateChangedAgain = endGame(); // Call again
         expect(stateChangedAgain).toBe(false); // endGame should indicate state did not change
         expect(getGameEndedState()).toBe(true); // Should remain true
@@ -211,10 +373,10 @@ describe('findGroup', () => {
         const group = findGroup(0, 1, testBoard, 'black');
         expect(group.stones.length).toBe(3);
         expect(group.stones).toEqual(expect.arrayContaining([[0, 1], [1, 1], [1, 0]]));
-        expect(group.liberties.size).toBe(5); 
+        expect(group.liberties.size).toBe(5);
         expect([...group.liberties]).toEqual(expect.arrayContaining(['0,0', '0,2', '1,2', '2,1', '2,0']));
     });
-    
+
     test('group with zero liberties (surrounded)', () => {
         testBoard[1][1] = 'black';
         testBoard[0][1] = 'white';
@@ -294,12 +456,12 @@ describe('placeStoneLogic - Captures and Suicide', () => {
         ]);
         player = 'black';
         // Player 'black' plays at (0,1) (Above W), completing the capture.
-        const result = placeStoneLogic(0, 1, board, player); 
+        const result = placeStoneLogic(0, 1, board, player);
 
-        expect(result.error).toBeUndefined(); 
+        expect(result.error).toBeUndefined();
         expect(result.moveMade).toBe(true);      // <<< This was failing (true expected, false received)
-        expect(result.newBoardState[0][1]).toBe('black'); 
-        expect(result.newBoardState[1][1]).toBeNull(); 
+        expect(result.newBoardState[0][1]).toBe('black');
+        expect(result.newBoardState[1][1]).toBeNull();
         expect(result.capturedCoords).toEqual(expect.arrayContaining([[1,1]]));
         expect(result.capturedCoords.length).toBe(1);
     });
@@ -316,9 +478,9 @@ describe('placeStoneLogic - Captures and Suicide', () => {
             {r:3,c:0, color:'black'},{r:3,c:1, color:'black'},{r:3,c:2, color:'black'},{r:3,c:3, color:'black'},
         ]);
         // Pre-fill one of the capture points for the group
-        board[2][2] = 'black'; 
+        board[2][2] = 'black';
         // Player 'black' plays at (2,1), which is the last liberty for the white group (1,1)-(1,2)
-        const result = placeStoneLogic(2, 1, board, 'black'); 
+        const result = placeStoneLogic(2, 1, board, 'black');
 
         expect(result.moveMade).toBe(true);
         expect(result.newBoardState[2][1]).toBe('black'); // Player's stone
@@ -367,9 +529,9 @@ describe('placeStoneLogic - Captures and Suicide', () => {
         // player = 'black'; // player is already 'black' from beforeEach or previous assignment in this block
         // const result = placeStoneLogic(1, 1, board, player); // First const result
         // expect(result.moveMade).toBe(true);
-        // expect(result.newBoardState[2][1]).toBeNull(); 
+        // expect(result.newBoardState[2][1]).toBeNull();
         // expect(result.capturedCoords).toEqual(expect.arrayContaining([[2,1]]));
-        
+
         // Using the setup intended for the final version of this test:
         // Player P, Opponent O
         // Test "valid suicide" (captures opponent, then self-group is removed OR REMAINS if liberty opened).
@@ -391,11 +553,11 @@ describe('placeStoneLogic - Captures and Suicide', () => {
         ]);
         player = 'black';
         board[0][1] = null; // Ensure X's spot (0,1) is clear for playing
-        expect(board[0][1]).toBeNull(); 
+        expect(board[0][1]).toBeNull();
         const result = placeStoneLogic(0, 1, board, player); // X played at (0,1)
 
         expect(result.error).toBeUndefined();
-        expect(result.moveMade).toBe(true); 
+        expect(result.moveMade).toBe(true);
         expect(result.newBoardState[0][0]).toBeNull(); // O captured
         expect(result.capturedCoords).toEqual(expect.arrayContaining([[0,0]]));
         // X and B survive because (0,0) became a liberty for their group
@@ -455,7 +617,7 @@ describe('AI Logic (aiMakeRandomMove)', () => {
         const move = aiMakeRandomMove(board, 'white');
         expect(move).toBeNull(); // AI should pass
     });
-    
+
     test('AI picks the only available valid move', () => {
         // Fill all but (0,0)
         for (let r = 0; r < BOARD_SIZE; r++) {
@@ -491,7 +653,7 @@ describe('AI Logic (aiMakeRandomMove)', () => {
         const move = aiMakeRandomMove(board, 'white');
         expect(move).not.toBeNull();
         expect(move).not.toEqual([0,0]); // Should not pick the suicidal spot
-        
+
         // Refined check: Ensure AI picks one of the known valid alternatives
         // In this setup, (1,1) and its liberties (1,2), (2,1) should be valid.
         // The AI could pick (1,1), (1,2), or (2,1) if they are empty and valid.
@@ -505,9 +667,9 @@ describe('AI Logic (aiMakeRandomMove)', () => {
         // (1,1) is a valid alternative.
         // (1,2) is another valid alternative.
         // (2,1) is another valid alternative.
-        board[1][1] = null; 
-        board[1][2] = null; 
-        board[2][1] = null; 
+        board[1][1] = null;
+        board[1][2] = null;
+        board[2][1] = null;
 
         // Fill all *other* spots to force AI's choice among (0,0), (1,1), (1,2), (2,1)
         for (let r = 0; r < BOARD_SIZE; r++) {
@@ -522,7 +684,7 @@ describe('AI Logic (aiMakeRandomMove)', () => {
                 }
             }
         }
-        
+
         const constrainedMove = aiMakeRandomMove(board, 'white');
         expect(constrainedMove).not.toBeNull();
         expect(constrainedMove).not.toEqual([0,0]); // Must not be the suicidal spot
@@ -535,9 +697,9 @@ describe('AI Logic (aiMakeRandomMove)', () => {
             expect(actualMoveCheck.moveMade).toBe(true);
         }
     });
-    
+
     test('AI passes if only suicidal moves are available', () => {
-        board = getInitialBoardState(); 
+        board = getInitialBoardState();
         const aiPlayer = 'white';
         const opponentPlayer = 'black';
 
@@ -550,11 +712,11 @@ describe('AI Logic (aiMakeRandomMove)', () => {
 
         // Create a single empty spot at (0,0) for the AI (white) to play
         board[0][0] = null;
-        
+
         // Ensure its direct neighbors are opponentPlayer, making it a suicide spot
         // (0,0)'s neighbors on a large board are (0,1) and (1,0)
         if (BOARD_SIZE > 1) { // These checks are for robustness, BOARD_SIZE is 19
-            board[0][1] = opponentPlayer; 
+            board[0][1] = opponentPlayer;
             board[1][0] = opponentPlayer;
         }
         // On a very small board (e.g. 1x1, though BOARD_SIZE=19), (0,0) might have fewer neighbors.
@@ -562,7 +724,7 @@ describe('AI Logic (aiMakeRandomMove)', () => {
 
         // Call placeStoneLogic to confirm it *should* be suicide
         const suicidalMoveCheck = placeStoneLogic(0, 0, board, aiPlayer);
-        
+
         // Log for debugging - may not appear in all test runners
         // console.log(`DEBUG: suicidalMoveCheck for (0,0) by ${aiPlayer}: ${JSON.stringify(suicidalMoveCheck)}`);
         // console.log(`DEBUG: Board state for this check (first few rows):`);
@@ -570,12 +732,12 @@ describe('AI Logic (aiMakeRandomMove)', () => {
 
 
         // This is the critical assertion. If placeStoneLogic is correct, this should pass.
-        expect(suicidalMoveCheck.moveMade).toBe(false); 
+        expect(suicidalMoveCheck.moveMade).toBe(false);
         // If the above passes, it means placeStoneLogic correctly identified suicide.
 
         // Now test aiMakeRandomMove
         // Given that (0,0) is the only empty spot and it's suicidal, AI should pass.
-        if (!suicidalMoveCheck.moveMade) { 
+        if (!suicidalMoveCheck.moveMade) {
             const move = aiMakeRandomMove(board, aiPlayer);
             expect(move).toBeNull(); // AI should pass
         } else {

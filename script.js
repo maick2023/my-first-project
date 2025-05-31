@@ -4,15 +4,17 @@ const BOARD_SIZE = 19;
                        // For star point positioning, we'll use percentages or derive from container.
 
 // Game settings
-let currentGameMode = 'pvai'; 
+let currentGameMode = 'pvai';
 let currentAiDifficulty = 'medium';
-const humanPlayerColor = 'black'; 
+const humanPlayerColor = 'black';
 const aiPlayerColor = 'white';
 
 // Global state variables
-let currentPlayer; 
-let boardState; 
+let currentPlayer;
+let boardState;
 let gameEnded = false;
+let stonesCapturedByBlack = 0;
+let stonesCapturedByWhite = 0;
 
 // DOM elements
 let goBoardContainer = null;
@@ -20,8 +22,8 @@ let gameModeSelect = null;
 let aiDifficultySelect = null;
 let aiDifficultySection = null;
 let newGameButton = null;
-let endGameButton = null; 
-let gameMessageElement = null; 
+let endGameButton = null;
+let gameMessageElement = null;
 
 // Helper function: Get valid neighbors
 function getNeighbors(row, col, boardSize) {
@@ -55,7 +57,7 @@ function findGroup(row, col, board, playerColor) {
     let head = 0;
     while (head < queue.length) {
         const [currentRow, currentCol] = queue[head++];
-        
+
         const neighbors = getNeighbors(currentRow, currentCol, BOARD_SIZE);
         for (const [nr, nc] of neighbors) {
             // Explicit boundary check, though getNeighbors should ensure this.
@@ -140,7 +142,7 @@ function placeStoneLogic(row, col, currentBoard, player) {
             }
         }
     }
-    
+
     const nextPlayer = (player === 'black') ? 'white' : 'black';
     return {
         newBoardState: tempBoard,
@@ -172,9 +174,9 @@ function handleIntersectionClick(event) {
         console.log("Move attempted, but game has ended.");
         if (gameMessageElement) gameMessageElement.textContent = "Game has ended. Press 'Start New Game' to play again.";
         // alert("The game has ended. Please start a new game."); // Alternative
-        return; 
+        return;
     }
-    if (!goBoardContainer) return; 
+    if (!goBoardContainer) return;
 
     const targetCell = event.currentTarget;
     const row = parseInt(targetCell.dataset.row);
@@ -184,7 +186,7 @@ function handleIntersectionClick(event) {
 
     if (currentGameMode === 'pvai' && currentPlayer === aiPlayerColor) {
         console.log("Human clicked, but it's AI's turn. Ignoring.");
-        return; 
+        return;
     }
     // In PvP mode, currentPlayer correctly reflects whose turn it is.
     // In PvAI mode, this block is only reached if currentPlayer is humanPlayerColor.
@@ -195,28 +197,39 @@ function handleIntersectionClick(event) {
         // const playerWhoPlacedStone = boardState[row][col]; // This would be null
         // The stone color is playerMakingMove
         boardState = result.newBoardState;
-        drawStone(row, col, playerMakingMove); 
+        drawStone(row, col, playerMakingMove);
 
         if (result.capturedCoords && result.capturedCoords.length > 0) {
-            console.log(`${playerMakingMove} captured stones at:`, result.capturedCoords);
+            const numCaptured = result.capturedCoords.length;
+            if (playerMakingMove === humanPlayerColor) { // Assuming human is black for now or based on humanPlayerColor
+                if (humanPlayerColor === 'black') stonesCapturedByBlack += numCaptured;
+                else stonesCapturedByWhite += numCaptured;
+            } else if (playerMakingMove === aiPlayerColor) { // This branch is for PvP if playerMakingMove can be AI
+                // This part of handleIntersectionClick is for human moves primarily in PvAI,
+                // or any player in PvP.
+                // If PvP, playerMakingMove is the current player.
+                if (playerMakingMove === 'black') stonesCapturedByBlack += numCaptured;
+                else stonesCapturedByWhite += numCaptured;
+            }
+            console.log(`Player ${playerMakingMove} captured ${numCaptured} stones. Total captured by Black: ${stonesCapturedByBlack}, by White: ${stonesCapturedByWhite}`);
             result.capturedCoords.forEach(coord => removeStoneFromDOM(coord[0], coord[1]));
         }
-        
+
         console.log(`Stone placed at (${row}, ${col}) by ${playerMakingMove}.`);
-        
+
         currentPlayer = result.newCurrentPlayer;
-        // updateTurnDisplay(); 
-        
+        // updateTurnDisplay();
+
         console.log(`[DEBUG] Human move by ${playerMakingMove} processed. Global currentPlayer is now: ${currentPlayer}. Game mode: ${currentGameMode}. AI color: ${aiPlayerColor}. Human color: ${humanPlayerColor}`);
 
         // Refined condition:
-        if (currentGameMode === 'pvai' && 
+        if (currentGameMode === 'pvai' &&
             playerMakingMove === humanPlayerColor && // Ensure the move just made was by the human
             currentPlayer === aiPlayerColor) {       // And now it's the AI's turn
-        
+
             console.log("[DEBUG] AI Trigger: Conditions met. Human made a move, and it's now AI's turn. Calling triggerAIMove via setTimeout.");
-            setTimeout(triggerAIMove, 500); 
-        
+            setTimeout(triggerAIMove, 500);
+
         } else if (currentGameMode === 'pvai' && playerMakingMove === humanPlayerColor && currentPlayer !== aiPlayerColor) {
             // This case means human moved, but it's somehow not AI's turn. This would be unexpected.
             console.warn(`[DEBUG] AI Trigger: Post-human move, but not AI's turn. Current player: ${currentPlayer}. AI Player: ${aiPlayerColor}`);
@@ -231,7 +244,7 @@ function handleIntersectionClick(event) {
 
 function triggerAIMove() {
     if (currentGameMode !== 'pvai' || currentPlayer !== aiPlayerColor) {
-        return; 
+        return;
     }
     console.log(`[DEBUG] triggerAIMove called. AI Player: ${aiPlayerColor}, Current Difficulty: ${currentAiDifficulty}`);
 
@@ -247,25 +260,28 @@ function triggerAIMove() {
     }
     console.log(`[DEBUG] AI function (${currentAiDifficulty}) proposed move:`, aiMoveCoords);
 
-    if (aiMoveCoords) { 
+    if (aiMoveCoords) {
         const [aiRow, aiCol] = aiMoveCoords;
         const aiResult = placeStoneLogic(aiRow, aiCol, boardState, aiPlayerColor);
         console.log(`[DEBUG] placeStoneLogic result for AI's move:`, aiResult);
 
         if (aiResult.moveMade) {
-            const prevPlayerForAIMove = aiPlayerColor; 
+            const prevPlayerForAIMove = aiPlayerColor;
             boardState = aiResult.newBoardState;
-            
-            drawStone(aiRow, aiCol, prevPlayerForAIMove); 
-            
+
+            drawStone(aiRow, aiCol, prevPlayerForAIMove);
+
             if (aiResult.capturedCoords && aiResult.capturedCoords.length > 0) {
-                console.log("AI captured stones at:", aiResult.capturedCoords);
+                const numCapturedByAI = aiResult.capturedCoords.length;
+                if (aiPlayerColor === 'black') stonesCapturedByBlack += numCapturedByAI;
+                else stonesCapturedByWhite += numCapturedByAI;
+                console.log(`AI (${aiPlayerColor}) captured ${numCapturedByAI} stones. Total captured by Black: ${stonesCapturedByBlack}, by White: ${stonesCapturedByWhite}`);
                 aiResult.capturedCoords.forEach(coord => removeStoneFromDOM(coord[0], coord[1]));
             }
             console.log("AI placed stone at:", aiRow, aiCol);
-            currentPlayer = aiResult.newCurrentPlayer; 
+            currentPlayer = aiResult.newCurrentPlayer;
             console.log(`[DEBUG] AI move successful. Updating boardState and DOM. New current player: ${currentPlayer}`);
-            // updateTurnDisplay(); 
+            // updateTurnDisplay();
 
             if (currentGameMode === 'pvai' && currentPlayer !== humanPlayerColor) {
                 console.error("Error: Turn did not switch back to human after AI move. Current player:", currentPlayer);
@@ -280,7 +296,7 @@ function triggerAIMove() {
         }
     } else {
         console.log("AI passes.");
-        currentPlayer = humanPlayerColor; 
+        currentPlayer = humanPlayerColor;
         console.log(`[DEBUG] AI passes. New current player: ${currentPlayer}`);
         // updateTurnDisplay();
     }
@@ -305,7 +321,7 @@ function removeStoneFromDOM(row, col) {
 }
 
 function addStarPoints() {
-    if (BOARD_SIZE !== 19 || !goBoardContainer) return; 
+    if (BOARD_SIZE !== 19 || !goBoardContainer) return;
 
     // Clear existing star points first
     const existingStarPoints = goBoardContainer.querySelectorAll('.star-point');
@@ -335,14 +351,14 @@ function addStarPoints() {
 }
 
 function drawBoard() {
-    if (!goBoardContainer) return; 
+    if (!goBoardContainer) return;
 
     // Clear only intersection divs if they exist, or all children if simple
     // goBoardContainer.innerHTML = ''; // This removes everything, including star points if they are direct children
                                      // and not re-added *after* intersections.
                                      // For this version, clearBoardDOM() handles stone removal.
                                      // drawBoard() will create intersections. Star points are added in initializeGame.
-    
+
     // Remove only old intersections to preserve other potential children if any
     const oldIntersections = goBoardContainer.querySelectorAll('.board-intersection');
     oldIntersections.forEach(intersection => intersection.remove());
@@ -383,20 +399,20 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
             console.error("One or more crucial UI elements for game setup not found!");
             // return; // Keep return if critical, or allow partial functionality
         }
-        
+
         if (gameModeSelect) {
             gameModeSelect.addEventListener('change', () => {
                 currentGameMode = gameModeSelect.value;
                 updateGameSetupUI();
             });
         }
-        
+
         if (aiDifficultySelect) {
             aiDifficultySelect.addEventListener('change', () => {
                 currentAiDifficulty = aiDifficultySelect.value;
             });
         }
-        
+
         if (newGameButton) {
             newGameButton.addEventListener('click', initializeGame);
         }
@@ -406,7 +422,7 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
         }
 
         initializeGame(); // Setup initial game state and board based on defaults
-        
+
     });
 }
 
@@ -431,21 +447,23 @@ function initializeGame() {
     // Read current selections from UI, or use defaults if UI not fully ready
     currentGameMode = gameModeSelect ? gameModeSelect.value : 'pvai';
     currentAiDifficulty = aiDifficultySelect ? aiDifficultySelect.value : 'medium';
-    
-    gameEnded = false; // Reset game ended state
-    if (gameMessageElement) gameMessageElement.textContent = ''; // Clear message
-    console.log("Game initialized/reset. gameEnded set to false.");
+
+    gameEnded = false;
+    if (gameMessageElement) gameMessageElement.textContent = '';
+    stonesCapturedByBlack = 0; // Reset capture counts
+    stonesCapturedByWhite = 0;
+    console.log("Game initialized/reset. gameEnded set to false. Capture counts reset.");
 
 
     console.log(`Initializing new game: Mode: ${currentGameMode}, Difficulty: ${currentAiDifficulty}`);
 
-    boardState = getInitialBoardState(); 
-    currentPlayer = getInitialCurrentPlayer(); 
+    boardState = getInitialBoardState();
+    currentPlayer = getInitialCurrentPlayer();
 
-    if (goBoardContainer) { 
+    if (goBoardContainer) {
         clearBoardDOM();
         if (typeof drawBoard === 'function') {
-             drawBoard(); 
+             drawBoard();
         } else {
             console.error("drawBoard function is not defined.");
         }
@@ -461,26 +479,30 @@ function initializeGame() {
 
 // Exports for testing in Node.js
 // Global getInitial functions for script top level and export
-function getInitialBoardState() { 
+function getInitialBoardState() {
     return Array(BOARD_SIZE).fill(null).map(() => Array(BOARD_SIZE).fill(null));
 }
-function getInitialCurrentPlayer() { 
-    return humanPlayerColor; 
+function getInitialCurrentPlayer() {
+    return humanPlayerColor;
 }
 
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         BOARD_SIZE,
-            getInitialBoardState, 
-            getInitialCurrentPlayer, 
+            getInitialBoardState,
+            getInitialCurrentPlayer,
             placeStoneLogic,
-            getNeighbors, 
-            findGroup,    
+            getNeighbors,
+            findGroup,
             aiMakeRandomMove,
             aiMakeHeuristicMove,
-            initializeGame, 
-            endGame,        
-            getGameEndedState 
+            initializeGame,
+            endGame,
+            getGameEndedState,
+            getTerritoryInfo, // Export new function
+            getStonesCapturedByBlack: () => stonesCapturedByBlack,
+            getStonesCapturedByWhite: () => stonesCapturedByWhite,
+            calculateScores // Export new function
     };
 }
 
@@ -503,15 +525,60 @@ function endGame() {
 
 // Event handler for the End Game button
 function handleEndGameButtonClick() {
-    if (endGame()) { // Call core logic
-        if (gameMessageElement) {
-            gameMessageElement.textContent = "Game Ended. Press 'Start New Game' to play again.";
-        } else {
-            // Fallback if messageElement isn't available (e.g. during tests or if DOM is weird)
-            alert("Game Ended. Press 'Start New Game' to play again.");
+    if (endGame()) { // Call core logic to set gameEnded = true
+        displayEndOfGameResults();
+    } else {
+        // If endGame() returned false, it means game was already ended.
+        // Message should already be displayed or can be re-displayed if needed.
+        if (gameMessageElement && !gameMessageElement.textContent.includes("Game Over!")) {
+             gameMessageElement.textContent = "Game already ended. Press 'Start New Game' to play again.";
         }
     }
 }
+
+function displayEndOfGameResults() {
+    console.log("Determining end of game results...");
+    if (typeof getTerritoryInfo !== 'function' || typeof calculateScores !== 'function') {
+        console.error("Scoring functions not available.");
+        if (gameMessageElement) gameMessageElement.textContent = "Error calculating score.";
+        return;
+    }
+
+    const territoryInfo = getTerritoryInfo(boardState);
+
+    // stonesCapturedByBlack = number of black stones captured by White.
+    // stonesCapturedByWhite = number of white stones captured by Black.
+    // calculateScores expects: (blackTerritory, whiteTerritory, blackStonesLost, whiteStonesLost, komi)
+    const scores = calculateScores(
+        territoryInfo.blackTerritory,
+        territoryInfo.whiteTerritory,
+        stonesCapturedByBlack,  // Black stones lost (captured by White)
+        stonesCapturedByWhite,  // White stones lost (captured by Black)
+        6.5 // Default Komi
+    );
+
+    let winnerMessage;
+    if (scores.blackScore > scores.whiteScore) {
+        winnerMessage = `Black wins by ${scores.blackScore - scores.whiteScore} points!`;
+    } else if (scores.whiteScore > scores.blackScore) {
+        winnerMessage = `White wins by ${scores.whiteScore - scores.blackScore} points!`;
+    } else {
+        winnerMessage = "Draw!";
+    }
+
+    const finalMessage = `Game Over!
+Black's Score: ${scores.blackScore} (Territory: ${territoryInfo.blackTerritory}, Captures for Black: ${stonesCapturedByWhite})
+White's Score: ${scores.whiteScore} (Territory: ${territoryInfo.whiteTerritory}, Captures for White: ${stonesCapturedByBlack}, Komi: 6.5)
+Result: ${winnerMessage}`;
+
+    if (gameMessageElement) {
+        gameMessageElement.innerText = finalMessage; // Use innerText to preserve line breaks
+    } else {
+        alert(finalMessage); // Fallback
+    }
+    console.log(finalMessage);
+}
+
 
 // Basic AI function
 function aiMakeRandomMove(currentBoard, playerColor) {
@@ -578,4 +645,69 @@ function aiMakeHeuristicMove(currentBoard, playerColor) {
         console.log("AI: No valid moves found, passing.");
         return null; // AI passes
     }
+}
+
+function getTerritoryInfo(board) { // board here is expected to be boardState
+    let blackTerritory = 0;
+    let whiteTerritory = 0;
+    let neutralPoints = 0;
+    const visited = Array(BOARD_SIZE).fill(null).map(() => Array(BOARD_SIZE).fill(false));
+
+    for (let r = 0; r < BOARD_SIZE; r++) {
+        for (let c = 0; c < BOARD_SIZE; c++) {
+            if (board[r][c] === null && !visited[r][c]) {
+                const area = [];
+                const borderingColors = new Set();
+                const queue = [[r, c]];
+                visited[r][c] = true;
+                let currentPointIndex = 0;
+                let isDame = false; // Flag for neutral/dame points
+
+                while (currentPointIndex < queue.length) {
+                    const [currR, currC] = queue[currentPointIndex++];
+                    area.push([currR, currC]);
+
+                    const neighbors = getNeighbors(currR, currC, BOARD_SIZE);
+                    for (const neighbor of neighbors) {
+                        const [nR, nC] = neighbor;
+                        if (board[nR][nC] === null && !visited[nR][nC]) {
+                            visited[nR][nC] = true;
+                            queue.push([nR, nC]);
+                        } else if (board[nR][nC] !== null) {
+                            borderingColors.add(board[nR][nC]);
+                        }
+                    }
+                }
+
+                if (borderingColors.size === 1) {
+                    if (borderingColors.has('black')) {
+                        blackTerritory += area.length;
+                    } else if (borderingColors.has('white')) {
+                        whiteTerritory += area.length;
+                    }
+                } else {
+                    // If borderingColors.size is 0 (empty board) or > 1 (dame), it's neutral
+                    neutralPoints += area.length;
+                }
+            }
+        }
+    }
+    console.log(`Territory found - Black: ${blackTerritory}, White: ${whiteTerritory}, Neutral: ${neutralPoints}`);
+    return { blackTerritory, whiteTerritory, neutralPoints };
+}
+
+function calculateScores(blackTerritory, whiteTerritory, numStonesCapturedByBlack, numStonesCapturedByWhite, komi = 6.5) {
+    // Note: stonesCapturedByBlack means stones Black player captured (which are White stones)
+    // stonesCapturedByWhite means stones White player captured (which are Black stones)
+
+    // Black's score = Black's territory + White stones Black captured
+    const blackScore = blackTerritory + numStonesCapturedByWhite;
+    // White's score = White's territory + Black stones White captured + Komi
+    const whiteScore = whiteTerritory + numStonesCapturedByBlack + komi;
+
+    console.log(`Calculating scores:`);
+    console.log(`  Black: ${blackTerritory} (territory) + ${numStonesCapturedByWhite} (captures) = ${blackScore}`);
+    console.log(`  White: ${whiteTerritory} (territory) + ${numStonesCapturedByBlack} (captures) + ${komi} (komi) = ${whiteScore}`);
+
+    return { blackScore, whiteScore };
 }
